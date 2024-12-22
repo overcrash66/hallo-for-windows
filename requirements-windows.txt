@@ -102,7 +102,7 @@ nodeenv==1.9.1
 numba==0.60.0
 numpy==1.26.4
 omegaconf==2.3.0
-onnx==1.16.1
+onnx==1.17.0
 onnx2torch==1.5.14
 onnxruntime==1.18.0
 opencv-contrib-python==4.9.0.80
