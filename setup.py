@@ -25,7 +25,7 @@ install_requires = \
  'einops>=0.8.0,<0.9.0',
  'insightface>=0.7.3,<0.8.0',
  'mediapipe[vision]>=0.10.14,<0.11.0',
- 'mlflow==2.13.1',
+ 'mlflow==2.16.0',
  'moviepy>=1.0.3,<2.0.0',
  'omegaconf>=2.3.0,<3.0.0',
  'opencv-python>=4.9.0.80,<5.0.0.0',
