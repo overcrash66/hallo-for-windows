@@ -114,6 +114,38 @@ def process_audio_emb(audio_emb):
     return audio_emb
 
 
+def combine_videos(save_path, final_output_file):
+    from moviepy.editor import VideoFileClip, concatenate_videoclips
+    input_dir = save_path
+    output_file = final_output_file
+    try:
+        # Get a sorted list of files matching the pattern output_0.mp4, output_1.mp4, ..., output_N.mp4
+        files = [f for f in os.listdir(input_dir) if f.startswith("output_") and f.endswith(".mp4")]
+        files = sorted(files, key=lambda x: int(x.split("_")[1].split(".")[0]))
+
+        if not files:
+            print("No MP4 files found in the specified directory.")
+            return
+
+        print(f"Merging {len(files)} files...")
+
+        # Load video clips
+        clips = [VideoFileClip(os.path.join(input_dir, file)) for file in files]
+
+        # Concatenate the video clips
+        final_clip = concatenate_videoclips(clips, method="compose")
+
+        # Write the result to the output file
+        final_clip.write_videofile(output_file, codec="libx264", audio_codec="aac")
+
+        print(f"Merging completed. Output saved as {output_file}.")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        pass
+    finally:
+        # Close all video clips to release resources
+        for clip in locals().get("clips", []):
+            clip.close()
 
 def inference_process(args: argparse.Namespace):
     """
@@ -179,7 +211,7 @@ def inference_process(args: argparse.Namespace):
         os.path.basename(audio_separator_model_file),
         os.path.join(save_path, "audio_preprocess")
     ) as audio_processor:
-        audio_emb, audio_length = audio_processor.preprocess(driving_audio_path, clip_length)
+        audio_emb, _ = audio_processor.preprocess(driving_audio_path, clip_length)
 
     # 4. build modules
     sched_kwargs = OmegaConf.to_container(config.noise_scheduler_kwargs)
@@ -220,7 +252,6 @@ def inference_process(args: argparse.Namespace):
     ).to(device=device, dtype=weight_dtype)
 
     audio_ckpt_dir = config.audio_ckpt_dir
-
 
     # Freeze
     vae.requires_grad_(False)
@@ -281,17 +312,15 @@ def inference_process(args: argparse.Namespace):
         for mask in source_image_lip_mask
     ]
 
-
     times = audio_emb.shape[0] // clip_length
 
     tensor_result = []
-
     generator = torch.manual_seed(42)
 
     for t in range(times):
         print(f"[{t+1}/{times}]")
 
-        if len(tensor_result) == 0:
+        if t == 0:
             # The first iteration
             motion_zeros = source_image_pixels.repeat(
                 config.data.n_motion_frames, 1, 1, 1)
@@ -338,14 +367,41 @@ def inference_process(args: argparse.Namespace):
 
         tensor_result.append(pipeline_output.videos)
 
-    tensor_result = torch.cat(tensor_result, dim=2)
-    tensor_result = tensor_result.squeeze(0)
-    tensor_result = tensor_result[:, :audio_length]
+        # Save intermediate results to avoid memory overflow
+        intermediate_output_file = f"{save_path}/output_{t}.mp4"
+        tensor_to_video(pipeline_output.videos.squeeze(0), intermediate_output_file, driving_audio_path)
+        if not os.path.exists(intermediate_output_file):
+            raise FileNotFoundError(f"Intermediate output file {intermediate_output_file} not found.")
 
-    output_file = config.output
-    # save the result after all iteration
-    tensor_to_video(tensor_result, output_file, driving_audio_path)
-    return output_file
+    # Combine all intermediate video files into the final output
+    final_output_file = args.output
+    combine_videos(save_path, final_output_file)
+    
+    #add replace the audio in the final output file with the driving audio
+    import subprocess
+    temp_output_file = f"{final_output_file}_audio.mp4"
+    command = [
+                'ffmpeg',
+                '-i', final_output_file,
+                '-i', driving_audio_path,
+                '-c:v', 'copy',
+                '-c:a', 'aac',
+                '-strict', 'experimental',
+                '-map', '0:v:0',
+                '-map', '1:a:0',
+                temp_output_file
+            ]
+    subprocess.run(command, check=True)
+
+    os.remove(final_output_file)
+    os.rename(f"{final_output_file}_audio.mp4", final_output_file)
+
+    # Clean up intermediate video files
+    for f in os.listdir(save_path):
+        if f.startswith("output_") and f.endswith(".mp4"):
+            os.remove(os.path.join(save_path, f))
+            
+    return final_output_file
 
 
 if __name__ == "__main__":
