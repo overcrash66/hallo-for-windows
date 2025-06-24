@@ -25,14 +25,14 @@ install_requires = \
  'einops>=0.8.0,<0.9.0',
  'insightface>=0.7.3,<0.8.0',
  'mediapipe[vision]>=0.10.14,<0.11.0',
- 'mlflow==2.13.1',
+ 'mlflow==3.1.0',
  'moviepy>=1.0.3,<2.0.0',
  'omegaconf>=2.3.0,<3.0.0',
  'opencv-python>=4.9.0.80,<5.0.0.0',
  'pillow>=10.3.0,<11.0.0',
- 'torch==2.2.2',
+ 'torch==2.7.1',
  'torchvision==0.17.2',
- 'transformers==4.39.2',
+ 'transformers==4.50.0',
  'xformers==0.0.25.post1']
 
 setup_kwargs = {
